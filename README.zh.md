@@ -13,6 +13,16 @@
 - Doc/Wiki Markdown Sync：飞书文档或 Wiki 与本地 Markdown/CSV/资源文件之间的同步。
 - Drive 原生 Markdown：飞书云空间中作为普通 `.md` 文件存储的 Markdown 文件。
 
+## 安装为本地 Codex Skill
+
+从 GitHub 安装或升级：
+
+```powershell
+python "$env:USERPROFILE\.codex\skills\.system\skill-installer\scripts\install-skill-from-github.py" --repo Linssen-Kong/Feisu-Markdown-Sync-Skill --ref master --path . --name feishu-markdown-sync
+```
+
+如果 `C:\Users\<you>\.codex\skills\feishu-markdown-sync` 已存在，请先删除或重命名这个已安装 skill 目录，再运行上面的命令。如果你之前安装过 `feishu-wiki-markdown-sync`，确认新 skill 可用后可以删除旧安装目录。安装后需要重启 Codex，新的 skill 才会被加载。
+
 ## 为什么需要它
 
 飞书文档适合协作，但默认不适合 Git diff、归档和离线审阅。本项目的目标是让产品文档、PRD、设计文档、表格型规划资料和白板内容变得：

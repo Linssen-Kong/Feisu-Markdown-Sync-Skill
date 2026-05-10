@@ -4,7 +4,7 @@
 
 `feishu-markdown-sync` is the product direction for this local Codex skill: a Git-friendly Feishu content sync tool that started with wiki/doc Markdown export, and is expanding toward first-class Sheet page export, audit, and round-trip workflows.
 
-The repository and current script names still keep `wiki` for backward compatibility. New product, roadmap, and release language should use **Feishu Markdown Sync** unless a command or environment variable requires the legacy name.
+Some legacy script names and default export folders still keep `wiki` for backward compatibility with existing doc/wiki sync workspaces. New product, install, roadmap, and release language should use **Feishu Markdown Sync** unless a command or environment variable requires the legacy name.
 
 Current release: `v1.6.0`
 
@@ -67,6 +67,16 @@ Feishu docs are great for collaboration, but they are not Git-friendly by defaul
 - Required `lark-cli`: `>= 1.0.27`
 
 This version depends on `lark-cli docs +media-insert --selection-with-ellipsis` for positioned media restore, and uses `docs +fetch/+update --api-version v2`, `sheets +export/+write/+append/+read`, `whiteboard +query/+update`, `markdown +create/+fetch/+overwrite`, and the newer Sheet/Base/Task/IM/Drive/config shortcuts added through `lark-cli v1.0.24-v1.0.27`.
+
+## Install As A Local Codex Skill
+
+Install or upgrade from GitHub:
+
+```powershell
+python "$env:USERPROFILE\.codex\skills\.system\skill-installer\scripts\install-skill-from-github.py" --repo Linssen-Kong/Feisu-Markdown-Sync-Skill --ref master --path . --name feishu-markdown-sync
+```
+
+If `C:\Users\<you>\.codex\skills\feishu-markdown-sync` already exists, remove or rename that installed skill directory first, then run the command again. If you previously installed `feishu-wiki-markdown-sync`, remove that old installed skill directory after confirming the new skill loads. Restart Codex after installation so the updated skill is loaded.
 
 ## Product Direction
 
@@ -148,7 +158,7 @@ See [docs/security-privacy-check.md](docs/security-privacy-check.md) for the Git
 ## Repository Layout
 
 ```text
-feishu-wiki-markdown-sync/
+feishu-markdown-sync/
   README.md
   SKILL.md
   agents/

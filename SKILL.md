@@ -1,5 +1,5 @@
 ---
-name: feishu-wiki-markdown-sync
+name: feishu-markdown-sync
 version: 1.6.0
 description: Export Feishu wiki, doc, and Sheet page content into Git-friendly Markdown, CSV, workbook, preview, and format snapshot files; inspect, pull, plan, and guarded-push manifest-backed sync workspaces; manage Drive-native Markdown files separately; write CSV or JSON 2D array data back into explicit Feishu Sheet ranges with read-back verification; inline document images; expand embedded sheets into CSV plus Markdown previews; convert raw whiteboards into readable Mermaid previews plus raw JSON audit files; audit readability and round-trip fidelity; and re-import Markdown back into Feishu docs with original-position image and file restore via lark-cli positioned media insertion. Use when the user asks to sync, export, archive, audit, or re-import Feishu wiki, docx, Sheet, or Drive-native Markdown content in a Git-friendly way.
 ---
@@ -10,7 +10,7 @@ Version: `v1.6.0`
 
 Required `lark-cli`: `>= 1.0.27`
 
-The repository and legacy script names still use `wiki` for compatibility. Product language should use **Feishu Markdown Sync** because Sheet pages are now in scope.
+Some legacy script names and default export folders still use `wiki` for compatibility. Product and install names should use **Feishu Markdown Sync** because doc, Sheet, Drive-native Markdown, and whiteboard workflows are now in scope.
 
 ## Configuration
 
