@@ -15,6 +15,7 @@ const DEFAULT_LARK_CLI = path.join(
   "run.js",
 );
 const NODE_BIN = process.env.NODE_BINARY || process.execPath || "node";
+const SCRIPT_DIR = __dirname;
 
 function printUsage() {
   console.error(
@@ -302,16 +303,27 @@ function writeConflictReport(root, title, items) {
   return reportPath;
 }
 
-function runNodeScript(script, args) {
-  const result = spawnSync(NODE_BIN, [path.join("scripts", script), ...args], {
+function runNodeScript(script, args, options = {}) {
+  const scriptPath = path.join(SCRIPT_DIR, script);
+  const result = spawnSync(NODE_BIN, [scriptPath, ...args], {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
-    cwd: process.cwd(),
+    cwd: options.cwd || process.cwd(),
   });
   if (result.status !== 0) {
     throw new Error(result.stderr || result.stdout || `${script} failed`);
   }
   return [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+}
+
+function pullExportContext(root) {
+  const outputRoot = path.resolve(root);
+  const cwd = path.dirname(outputRoot);
+  const outputArg = path.basename(outputRoot);
+  if (!outputArg || cwd === outputRoot) {
+    return { cwd: process.cwd(), outputArg: outputRoot };
+  }
+  return { cwd, outputArg };
 }
 
 function extractJson(text) {
@@ -580,13 +592,15 @@ function commandPull(options) {
   if (!options.wikiToken || !options.baseUrl) {
     throw new Error("pull 需要 --wiki-token 和 --base-url，或设置 FEISHU_WIKI_TOKEN/FEISHU_BASE_URL");
   }
+  const exportContext = pullExportContext(options.root);
+  ensureDir(exportContext.cwd);
   runNodeScript("export_feishu_wiki.cjs", [
     options.wikiToken,
-    options.root,
+    exportContext.outputArg,
     "--base-url",
     options.baseUrl,
     ...(options.includeSensitiveMetadata ? ["--include-sensitive-metadata"] : []),
-  ]);
+  ], { cwd: exportContext.cwd });
   const manifest = buildManifestFromWorkspace(options.root);
   manifest.lastSyncDirection = "pull";
   saveManifest(options.root, manifest);
