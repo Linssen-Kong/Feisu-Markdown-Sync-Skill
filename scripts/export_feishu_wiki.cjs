@@ -16,6 +16,7 @@ const BOOLEAN_TRUE_VALUES = new Set(["1", "true", "yes", "on"]);
 const BOOLEAN_FALSE_VALUES = new Set(["0", "false", "no", "off"]);
 const EXPORT_INDEX_BEGIN = "<!-- FEISHU_EXPORT_INDEX_BEGIN -->";
 const EXPORT_INDEX_END = "<!-- FEISHU_EXPORT_INDEX_END -->";
+const NODE_BIN = process.env.NODE_BINARY || process.execPath || "node";
 
 function printUsage() {
   console.error(
@@ -322,7 +323,7 @@ function buildMetadata(node) {
 }
 
 function runLark(rawArgs, options = {}) {
-  const result = spawnSync("node", [LARK_CLI, ...rawArgs], {
+  const result = spawnSync(NODE_BIN, [LARK_CLI, ...rawArgs], {
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,
     cwd: process.cwd(),
@@ -334,20 +335,19 @@ function runLark(rawArgs, options = {}) {
 
   const jsonText = extractJson(combined);
   if (jsonText) {
+    let parsed;
     try {
-      const parsed = JSON.parse(jsonText);
-      if (result.status === 0) {
-        return parsed;
-      }
-      if (options.allowFailure) {
-        return parsed;
-      }
-      throw new Error(JSON.stringify(parsed, null, 2));
+      parsed = JSON.parse(jsonText);
     } catch (error) {
-      if (!options.allowFailure) {
-        throw new Error(`无法解析 lark-cli 输出: ${combined}`);
-      }
+      throw new Error(`无法解析 lark-cli 输出: ${combined}`);
     }
+    if (result.status === 0) {
+      return parsed;
+    }
+    if (options.allowFailure) {
+      return parsed;
+    }
+    throw new Error(JSON.stringify(parsed, null, 2));
   }
 
   if (result.status === 0) {
@@ -425,6 +425,110 @@ function fetchDocMarkdown(nodeToken) {
     markdown: result.data?.markdown || "",
     raw: result,
   };
+}
+
+function fetchDocXml(nodeToken, objToken = "") {
+  const result = runLark(
+    [
+      "docs",
+      "+fetch",
+      "--api-version",
+      "v2",
+      "--doc",
+      buildWikiUrl(nodeToken),
+      "--doc-format",
+      "xml",
+      "--detail",
+      "full",
+      "--as",
+      "user",
+      "--format",
+      "json",
+    ],
+    { allowFailure: true },
+  );
+  if (result?.ok === false) {
+    if (objToken) {
+      const fallback = runLark(
+        [
+          "docs",
+          "+fetch",
+          "--api-version",
+          "v2",
+          "--doc",
+          objToken,
+          "--doc-format",
+          "xml",
+          "--detail",
+          "full",
+          "--as",
+          "user",
+          "--format",
+          "json",
+        ],
+        { allowFailure: true },
+      );
+      if (fallback?.ok !== false) {
+        return {
+          xml: fallback.data?.document?.content || fallback.data?.content || "",
+          revisionId: fallback.data?.document?.revision_id || fallback.data?.revision_id || null,
+          raw: fallback,
+          fallback: "obj_token",
+        };
+      }
+    }
+    return {
+      xml: "",
+      revisionId: null,
+      error: result.error?.message || "unknown error",
+      raw: result,
+    };
+  }
+  return {
+    xml: result.data?.document?.content || result.data?.content || "",
+    revisionId: result.data?.document?.revision_id || result.data?.revision_id || null,
+    raw: result,
+  };
+}
+
+function extractXmlBlocks(xml) {
+  const blocks = [];
+  const blockRegex = /<([a-zA-Z][\w-]*)([^>]*)\bid="([^"]+)"([^>]*)>([\s\S]*?)<\/\1>|<([a-zA-Z][\w-]*)([^>]*)\bid="([^"]+)"([^>]*)\/>/g;
+  let match;
+  while ((match = blockRegex.exec(xml || ""))) {
+    const tag = match[1] || match[6];
+    const attrs = `${match[2] || ""}${match[4] || ""}${match[7] || ""}${match[9] || ""}`;
+    const id = match[3] || match[8];
+    const content = match[5] || "";
+    blocks.push({
+      id,
+      tag,
+      type: tag,
+      textFingerprint: normalizeWhitespace(content.replace(/<[^>]+>/g, " ")).slice(0, 120),
+      formatAttrs: extractFormatAttrs(attrs),
+    });
+  }
+  return blocks;
+}
+
+function extractFormatAttrs(attrs) {
+  const result = {};
+  const attrRegex = /\b([a-zA-Z][\w-]*)="([^"]*)"/g;
+  let match;
+  while ((match = attrRegex.exec(attrs || ""))) {
+    const key = match[1];
+    if (key === "id") {
+      continue;
+    }
+    if (
+      /^(align|background-color|border-color|text-color|vertical-align|width|height|caption|type|view-type|done|seq|href|name|token|sheet-id)$/i.test(
+        key,
+      )
+    ) {
+      result[key] = match[2];
+    }
+  }
+  return result;
 }
 
 function queryWhiteboard(token, outputAs) {
@@ -664,6 +768,17 @@ function parseCsv(text) {
     rows.push(row);
   }
   return rows;
+}
+
+function columnName(index) {
+  let value = Math.max(1, Number(index) || 1);
+  let name = "";
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    name = String.fromCharCode(65 + remainder) + name;
+    value = Math.floor((value - 1) / 26);
+  }
+  return name;
 }
 
 function csvToMarkdownTable(csvText, maxRows = 8, maxCols = 8) {
@@ -924,9 +1039,12 @@ function formatWhiteboardRawFallback(token, nodes, context, index) {
   const mindmapAssetName = assetName.replace(/\.raw\.json$/i, ".mindmap.mmd");
   const mindmapAssetPath = path.join(context.assetsDir, mindmapAssetName);
   writeFile(mindmapAssetPath, `${mindmap}\n`);
+  const previewAssetName = assetName.replace(/\.raw\.json$/i, ".preview.md");
+  const previewAssetPath = path.join(context.assetsDir, previewAssetName);
 
   const relative = path.relative(context.nodeDir, assetPath).replace(/\\/g, "/");
   const mindmapRelative = path.relative(context.nodeDir, mindmapAssetPath).replace(/\\/g, "/");
+  const previewRelative = path.relative(context.nodeDir, previewAssetPath).replace(/\\/g, "/");
   const lines = [];
   lines.push("> 白板未命中 code 导出，已自动回退为 raw 节点导出，并生成 Mermaid mindmap 预览。");
   lines.push(`> 节点数: ${summary.nodeCount}`);
@@ -937,7 +1055,47 @@ function formatWhiteboardRawFallback(token, nodes, context, index) {
     lines.push(`> 可见文本: ${summary.labels.join(" / ")}`);
   }
 
-  return `\n\n${lines.join("\n")}\n\n\`\`\`mermaid\n${mindmap}\n\`\`\`\n\n[白板 Mermaid mindmap](./${mindmapRelative})\n\n[白板原始节点 JSON](./${relative})\n\n`;
+  const previewLines = [
+    `# 白板 ${index} 可读预览`,
+    "",
+    `- 节点数: ${summary.nodeCount}`,
+    `- 主要类型: ${summary.topTypes.join(", ") || "无"}`,
+    "",
+    "## 可见文本",
+    "",
+    ...(summary.labels.length ? summary.labels.map((label) => `- ${label}`) : ["- 无"]),
+    "",
+    "## Mermaid Mindmap",
+    "",
+    "```mermaid",
+    mindmap,
+    "```",
+    "",
+    "## 审计附件",
+    "",
+    `- [Mermaid mindmap](./${path.basename(mindmapAssetPath)})`,
+    `- [Raw JSON](./${path.basename(assetPath)})`,
+    "",
+  ];
+  writeFile(previewAssetPath, previewLines.join("\n"));
+
+  return `\n\n${lines.join("\n")}\n\n\`\`\`mermaid\n${mindmap}\n\`\`\`\n\n[白板可读预览](./${previewRelative})\n\n[白板 Mermaid mindmap](./${mindmapRelative})\n\n[白板原始节点 JSON](./${relative})\n\n`;
+}
+
+function listSheetMetadata(spreadsheetToken) {
+  const result = runLark(
+    [
+      "sheets",
+      "+info",
+      "--spreadsheet-token",
+      spreadsheetToken,
+      "--as",
+      "user",
+    ],
+    { allowFailure: true },
+  );
+  const sheets = result?.data?.sheets?.sheets || result?.data?.sheets || [];
+  return Array.isArray(sheets) ? sheets : [];
 }
 
 function convertLarkTable(tableContent) {
@@ -1253,11 +1411,36 @@ function exportNode(node, parentDir, collected) {
 
   if (node.obj_type === "docx" || node.obj_type === "doc") {
     const fetched = fetchDocMarkdown(node.node_token);
+    const fetchedXml = fetchDocXml(node.node_token, node.obj_token);
+    const formatMap = {
+      version: 1,
+      title: node.title,
+      objType: node.obj_type,
+      nodeTokenRedacted: !CONFIG.includeSensitiveMetadata,
+      revisionId: fetchedXml.revisionId,
+      source: CONFIG.includeSensitiveMetadata ? buildWikiUrl(node.node_token) : null,
+      blocks: extractXmlBlocks(fetchedXml.xml),
+      resources: [],
+      readability: {
+        rawOnly: [],
+        previews: [],
+      },
+      fetchError: fetchedXml.error || null,
+    };
+    if (fetchedXml.xml) {
+      writeFile(path.join(assetsDir, `${safeTitle}.format.xml`), `${fetchedXml.xml}\n`);
+    }
     const transformed = transformMarkdown(fetched.markdown, {
       nodeDir,
       assetsDir,
       node,
     });
+    formatMap.resources = transformed.whiteboards.map((item) => ({
+      type: "whiteboard",
+      mode: item.mode,
+      nodeCount: item.nodeCount || null,
+    }));
+    writeFile(path.join(assetsDir, "format-map.json"), `${JSON.stringify(formatMap, null, 2)}\n`);
     indexLines.push(transformed.markdown.trimEnd());
     indexLines.push("");
 
@@ -1286,6 +1469,16 @@ function exportNode(node, parentDir, collected) {
     } else {
       const csvOutputDir = path.join(nodeDir, "csv");
       const csvFiles = convertXlsxToCsvs(xlsxPath, csvOutputDir);
+      const remoteSheets = listSheetMetadata(node.obj_token);
+      const sheetFormat = {
+        version: 1,
+        title: node.title,
+        objType: "sheet",
+        spreadsheetTokenRedacted: !CONFIG.includeSensitiveMetadata,
+        spreadsheetToken: CONFIG.includeSensitiveMetadata ? node.obj_token : null,
+        workbook: path.basename(xlsxPath),
+        sheets: [],
+      };
       indexLines.push("## 表格导出");
       indexLines.push("");
       if (CONFIG.includeSensitiveMetadata) {
@@ -1300,12 +1493,23 @@ function exportNode(node, parentDir, collected) {
         const csvName = path.basename(csvFile);
         const csvRelative = path.relative(nodeDir, csvFile).replace(/\\/g, "/");
         const csvText = fs.readFileSync(csvFile, "utf8");
+        const parsedCsv = parseCsv(csvText);
+        const csvBaseName = path.basename(csvFile, ".csv");
+        const remoteSheet =
+          remoteSheets.find((sheet) => sheet.title === csvBaseName) ||
+          remoteSheets.find((sheet) => sheet.title === csvBaseName.replace(/_/g, " ")) ||
+          null;
         const previewName = csvName.replace(/\.csv$/i, ".preview.md");
         const previewPath = path.join(nodeDir, previewName);
         const previewContent = [
           `# ${csvName}`,
           "",
           `- CSV 文件: [${csvName}](./${csvRelative})`,
+          `- Sheet ID: ${remoteSheet?.sheet_id || "未知"}`,
+          `- 行数: ${parsedCsv.length}`,
+          `- 列数: ${Math.max(0, ...parsedCsv.map((row) => row.length))}`,
+          `- 预览行数: 最多 20 行`,
+          `- 写回提示: 使用 \`scripts/import_feishu_sheet.cjs --sheet-id ${remoteSheet?.sheet_id || "<sheet_id>"} --range A1:${columnName(Math.max(1, ...parsedCsv.map((row) => row.length)))}${Math.max(1, parsedCsv.length)} --input "${csvRelative}"\``,
           "",
           "## 预览",
           "",
@@ -1318,7 +1522,17 @@ function exportNode(node, parentDir, collected) {
         indexLines.push("");
         indexLines.push(csvToMarkdownTable(csvText, 6, 8));
         indexLines.push("");
+        sheetFormat.sheets.push({
+          csv: csvRelative,
+          preview: previewName,
+          sheetId: remoteSheet?.sheet_id || null,
+          title: csvBaseName,
+          rowCount: parsedCsv.length,
+          columnCount: Math.max(0, ...parsedCsv.map((row) => row.length)),
+          defaultRange: `A1:${columnName(Math.max(1, ...parsedCsv.map((row) => row.length)))}${Math.max(1, parsedCsv.length)}`,
+        });
       }
+      writeFile(path.join(nodeDir, "sheet-format.json"), `${JSON.stringify(sheetFormat, null, 2)}\n`);
       const readmePath = path.join(nodeDir, "README.md");
       writeFile(readmePath, `${indexLines.join("\n").trimEnd()}\n`);
     }

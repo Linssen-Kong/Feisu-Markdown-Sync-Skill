@@ -2,8 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const SKILL_VERSION = "1.3.0";
-const MIN_LARK_CLI_VERSION = "1.0.20";
+const SKILL_VERSION = "1.6.0";
+const MIN_LARK_CLI_VERSION = "1.0.27";
 const IMAGE_EXTENSIONS = new Set([
   ".png",
   ".jpg",
@@ -18,6 +18,13 @@ const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown", ".mdown"]);
 const inputPath = process.argv[2];
 const targetDoc = process.argv[3];
 const titleArg = process.argv[4] || "";
+
+if (inputPath === "--help" || inputPath === "-h") {
+  console.error(
+    "用法: node scripts/import_feishu_markdown.cjs <markdown文件> <目标doc/docx链接或token> [文档标题]",
+  );
+  process.exit(0);
+}
 
 if (!inputPath || !targetDoc) {
   console.error(
@@ -35,9 +42,10 @@ const LARK_CLI = process.env.LARK_CLI_PATH || path.join(
   "scripts",
   "run.js",
 );
+const NODE_BIN = process.env.NODE_BINARY || process.execPath || "node";
 
 function runLark(rawArgs, options = {}) {
-  const result = spawnSync("node", [LARK_CLI, ...rawArgs], {
+  const result = spawnSync(NODE_BIN, [LARK_CLI, ...rawArgs], {
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,
     cwd: process.cwd(),
@@ -49,20 +57,19 @@ function runLark(rawArgs, options = {}) {
 
   const jsonText = extractJson(combined);
   if (jsonText) {
+    let parsed;
     try {
-      const parsed = JSON.parse(jsonText);
-      if (result.status === 0) {
-        return parsed;
-      }
-      if (options.allowFailure) {
-        return parsed;
-      }
-      throw new Error(JSON.stringify(parsed, null, 2));
+      parsed = JSON.parse(jsonText);
     } catch (error) {
-      if (!options.allowFailure) {
-        throw new Error(`无法解析 lark-cli 输出: ${combined}`);
-      }
+      throw new Error(`无法解析 lark-cli 输出: ${combined}`);
     }
+    if (result.status === 0) {
+      return parsed;
+    }
+    if (options.allowFailure) {
+      return parsed;
+    }
+    throw new Error(JSON.stringify(parsed, null, 2));
   }
 
   if (result.status === 0) {
@@ -507,6 +514,9 @@ function main() {
   const codepenConverted = convertCodePenLinks(rawMarkdown);
   const withNormalizedMermaid = normalizeMermaidCodeBlocks(codepenConverted);
   const extracted = extractLocalMedia(withNormalizedMermaid, inputDir);
+  const markdownForImport = titleArg
+    ? `# ${titleArg}\n\n${extracted.markdown.replace(/^# .+\n+/, "")}`
+    : extracted.markdown;
 
   let tempPath = "";
   try {
@@ -517,24 +527,24 @@ function main() {
     );
     const tempRelativePath = `.${path.sep}.tmp${path.sep}${path.basename(tempPath)}`;
     fs.mkdirSync(path.dirname(tempPath), { recursive: true });
-    fs.writeFileSync(tempPath, extracted.markdown, "utf8");
+    fs.writeFileSync(tempPath, markdownForImport, "utf8");
 
     const args = [
       "docs",
       "+update",
+      "--api-version",
+      "v2",
       "--doc",
       targetDoc,
-      "--mode",
+      "--command",
       "overwrite",
-      "--markdown",
+      "--doc-format",
+      "markdown",
+      "--content",
       `@${tempRelativePath}`,
       "--as",
       "user",
     ];
-
-    if (titleArg) {
-      args.splice(6, 0, "--new-title", titleArg);
-    }
 
     const result = ensureOk(runLark(args), "回导正文");
     const docId = resolveDocId(result, targetDoc);

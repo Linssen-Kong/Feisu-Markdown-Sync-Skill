@@ -1,8 +1,14 @@
 # Feishu Markdown Sync
 
-`feishu-wiki-markdown-sync` is a local Codex skill for exporting Feishu wiki/doc content into Git-friendly Markdown and round-tripping selected Markdown documents back into Feishu docs.
+[English](README.md) | [简体中文](README.zh.md)
 
-Current release: `v1.3.1`
+`feishu-markdown-sync` is the product direction for this local Codex skill: a Git-friendly Feishu content sync tool that started with wiki/doc Markdown export, and is expanding toward first-class Sheet page export, audit, and round-trip workflows.
+
+The repository and current script names still keep `wiki` for backward compatibility. New product, roadmap, and release language should use **Feishu Markdown Sync** unless a command or environment variable requires the legacy name.
+
+Current release: `v1.6.0`
+
+This release adopts `lark-cli v1.0.27`, adds Drive-native Markdown file helpers, exposes the newest CLI shortcut families through guarded wrappers, and keeps the doc/wiki Markdown sync path separate from raw `.md` file management.
 
 ## Configuration
 
@@ -18,7 +24,7 @@ Available configuration:
 
 - `FEISHU_BASE_URL`: required tenant base URL for wiki/doc links
 - `FEISHU_WIKI_TOKEN`: optional default wiki token for export
-- `FEISHU_OUTPUT_ROOT`: optional default export directory, defaults to `exports/feishu-wiki/`
+- `FEISHU_OUTPUT_ROOT`: optional default export directory, defaults to `exports/feishu-wiki/` for compatibility
 - `FEISHU_EXPORT_ROOT`: optional default audit directory
 - `FEISHU_INCLUDE_SENSITIVE_METADATA`: optional, defaults to `false`
 - `FEISHU_KEEP_SENSITIVE_PLACEHOLDERS`: optional, defaults to `false`
@@ -27,6 +33,10 @@ Available configuration:
 ## What It Does
 
 - Export a Feishu wiki tree into readable local Markdown
+- Treat top-level Sheet pages and embedded Sheet blocks as first-class sync objects
+- Write CSV or JSON 2D array data back into an explicit Feishu Sheet range with read-back verification
+- Pull, inspect, and push through a manifest-backed sync shell without making Git commits for the user
+- Preserve document format snapshots as XML plus format maps for safer future merges
 - Download doc images and rewrite them as inline Markdown images
 - Expand embedded sheet blocks into local `CSV` files plus Markdown table previews
 - Convert Feishu text-drawing add-ons into plain code blocks that preserve Mermaid text
@@ -37,6 +47,9 @@ Available configuration:
 - Update existing Feishu whiteboards through `lark-cli whiteboard +query/+update` when a live whiteboard token is available
 - Re-import Markdown into Feishu docs with original-position image restore
 - Re-import standalone local non-Markdown files into Feishu docs as positioned file blocks
+- Manage Drive-native Markdown files through `lark-cli markdown +create/+fetch/+overwrite` without mixing them into doc/wiki sync
+- Use guarded project wrappers for new Sheet management, Base record, Task attachment, IM search, Drive comment, and config bind shortcuts
+- Write Mermaid/PlantUML text diagrams into live Feishu whiteboards, and keep doc v2 `<add-ons>` verification experimental
 - Keep export-level `tree.txt` and `codepen-links.md` inside the root document assets folder, with the export index appended to the root Markdown file
 
 ## Why This Exists
@@ -50,12 +63,56 @@ Feishu docs are great for collaboration, but they are not Git-friendly by defaul
 
 ## Version and CLI Requirement
 
-- Skill version: `v1.3.1`
-- Required `lark-cli`: `>= 1.0.20`
+- Skill version: `v1.6.0`
+- Required `lark-cli`: `>= 1.0.27`
 
-This version depends on `lark-cli docs +media-insert --selection-with-ellipsis` for positioned media restore, and uses the newer `docs +fetch/+update --api-version v2` and `whiteboard +query/+update` flows for focused edits.
+This version depends on `lark-cli docs +media-insert --selection-with-ellipsis` for positioned media restore, and uses `docs +fetch/+update --api-version v2`, `sheets +export/+write/+append/+read`, `whiteboard +query/+update`, `markdown +create/+fetch/+overwrite`, and the newer Sheet/Base/Task/IM/Drive/config shortcuts added through `lark-cli v1.0.24-v1.0.27`.
+
+## Product Direction
+
+The product is moving from "Wiki Markdown export" to "Feishu knowledge asset sync":
+
+- Wiki/doc pages remain the core Markdown export and import surface.
+- Sheet pages become a first-class page type, not just an embedded-doc accessory.
+- CLI upgrades are treated as product input: every meaningful `lark-cli` release should be reviewed for new document, sheet, drive, media, and whiteboard capabilities that can reduce custom code or improve round-trip fidelity.
+
+See [docs/product-roadmap.md](docs/product-roadmap.md) for the v1.4+ roadmap and CLI upgrade intake checklist.
+See [docs/cli-capability-matrix.md](docs/cli-capability-matrix.md) for the current CLI capability matrix and Sheet write-back rules.
+See [docs/feature-support.md](docs/feature-support.md) for the cloud-verified, blocked, and unsupported feature list.
+See [docs/feature-support.zh.md](docs/feature-support.zh.md) for the Chinese feature support list.
+See [docs/security-privacy-check.md](docs/security-privacy-check.md) for the GitHub publishing safety check.
 
 ## Release Log
+
+### v1.6.0
+
+- Raised the documented and script-enforced `lark-cli` baseline to `>= 1.0.27`.
+- Added `scripts/lib/lark_cli.cjs` for shared CLI execution, JSON parsing, version checks, and local path handling.
+- Added `scripts/feishu_markdown_file.cjs` for Drive-native Markdown files. This is separate from doc/wiki Markdown Sync and wraps `markdown +create/+fetch/+overwrite`.
+- Added `scripts/feishu_cli_tools.cjs` as a guarded project entry for new Sheet management, Base record get/delete, Task attachment upload, IM message search, Drive comments, and config bind flows.
+- Added `scripts/feishu_text_diagram.cjs` for Mermaid/PlantUML whiteboard updates and experimental doc v2 `<add-ons>` round-trip verification.
+- Documented `lark-cli v1.0.24-v1.0.27` upgrade intake: Sheet management, Base batch operations, task attachments, Drive comment preflight, Markdown create URL output, skills drift notices, IM `message_app_link`, auth scope hints, whiteboard risk classification, and `lark-channel` config binding.
+
+### v1.5.0
+
+- Added `scripts/feishu_sync.cjs` with `status`, `plan`, `pull`, `push`, and `refresh`.
+- Added manifest-backed sync baselines under `.feishu-sync/manifest.json`; Git commits remain a user-controlled workflow outside the sync script.
+- Document export now writes `*.assets/*.format.xml` and `*.assets/format-map.json` for v2 XML format preservation.
+- Added `scripts/compile_feishu_doc_xml.cjs` so Markdown edits can be merged into the XML format snapshot before rich-format write-back.
+- Sheet export now writes `sheet-format.json` with CSV preview metadata, sheet IDs when available, row/column counts, and default write-back ranges.
+- Whiteboard raw fallback now creates a human-readable `*.preview.md` alongside `*.mindmap.mmd` and `*.raw.json`.
+- Audit reports now flag raw-only resources and missing format maps/sheet format metadata.
+- Markdown import now uses `docs +update --api-version v2 --command overwrite --doc-format markdown --content @file`.
+
+### v1.4.0
+
+- Repositioned the project as Feishu Markdown Sync while keeping legacy `wiki` script names compatible.
+- Raised the documented `lark-cli` baseline to `>= 1.0.23`.
+- Added `scripts/import_feishu_sheet.cjs` for explicit-range Sheet write-back from CSV or JSON 2D arrays.
+- Sheet write-back now runs read-back verification and retries transient read failures.
+- Added CLI capability matrix and validation log docs.
+- Verified real cloud Sheet create, write, append, read, CSV export, and XLSX export on `lark-cli v1.0.23`.
+- Revalidated text-drawing `add-ons`; v1.0.23 accepts create/update calls without warnings, but fetch does not preserve live add-ons blocks, so live round-trip remains unsupported.
 
 ### v1.3.1
 
@@ -96,15 +153,50 @@ feishu-wiki-markdown-sync/
   SKILL.md
   agents/
     openai.yaml
+  docs/
+    product-roadmap.md
   scripts/
+    lib/lark_cli.cjs
+    feishu_sync.cjs
+    feishu_cli_tools.cjs
+    feishu_markdown_file.cjs
+    feishu_text_diagram.cjs
     export_feishu_wiki.cjs
     audit_feishu_export.cjs
     import_feishu_markdown.cjs
-    patch_feishu_doc.cjs
-    merge_diff_to_feishu_doc.cjs
+    import_feishu_sheet.cjs
 ```
 
 ## Main Workflows
+
+### 0. Sync status and planning
+
+Inspect local changes and readability risks:
+
+```powershell
+node scripts/feishu_sync.cjs status --root exports/feishu-wiki
+```
+
+Preview what would be pushed:
+
+```powershell
+node scripts/feishu_sync.cjs plan --root exports/feishu-wiki
+```
+
+Pull from Feishu and refresh the manifest baseline:
+
+```powershell
+node scripts/feishu_sync.cjs pull --wiki-token "<wiki_token>" --base-url https://your-tenant.feishu.cn --root exports/feishu-wiki
+```
+
+Push is conservative. It plans by default and only writes with `--apply`; format-layer changes or unsafe cases generate a conflict report under `.tmp/`:
+
+```powershell
+node scripts/feishu_sync.cjs push --root exports/feishu-wiki
+node scripts/feishu_sync.cjs push --root exports/feishu-wiki --apply
+```
+
+For documents with rich blocks, `push --apply` first compiles the edited Markdown into the document's `*.assets/*.format.xml` snapshot, then writes the compiled XML back to Feishu. This keeps Markdown as the human editing surface while preserving callout, checkbox, table, and code-block formatting where the block mapping is safe.
 
 ### 1. Export a wiki tree
 
@@ -155,6 +247,32 @@ node scripts/import_feishu_markdown.cjs "<markdown_file>" "<docx_url_or_token>" 
 
 Use this whole-document import only after checking whether a chapter, paragraph, block id, or `start...end` text span can be updated safely. If the exported Markdown and target Feishu document are structurally incompatible and no reliable local match exists, fall back to this overwrite path.
 
+### 3b. Write back one Sheet range
+
+Write a local CSV into an explicit range and verify by read-back:
+
+```powershell
+node scripts/import_feishu_sheet.cjs --url "<sheet_url>" --sheet-id "<sheet_id>" --range "A2:C3" --input ".\changes.csv"
+```
+
+Append rows from a JSON 2D array:
+
+```powershell
+node scripts/import_feishu_sheet.cjs --url "<sheet_url>" --sheet-id "<sheet_id>" --range "A:C" --mode append --values '[[2026,"追加","ok"]]'
+```
+
+Sheet write-back intentionally requires `--range`; the script refuses implicit whole-sheet writes.
+
+### 3c. Manage Drive-native Markdown files
+
+Use this only for Drive files that are stored as plain `.md` files. It does not replace wiki/docx export, import, or sync.
+
+```powershell
+node scripts/feishu_markdown_file.cjs create --file ".\note.md" --folder-token "<folder_token>" --dry-run
+node scripts/feishu_markdown_file.cjs fetch --file-token "<markdown_file_token>" --output ".\exports\drive-markdown\note.md"
+node scripts/feishu_markdown_file.cjs overwrite --file-token "<markdown_file_token>" --file ".\note.md" --dry-run
+```
+
 ### 4. Patch one chapter or paragraph
 
 First locate the target section or block:
@@ -176,8 +294,21 @@ Add `--dry-run` to inspect the request before risky writes.
 ### 5. Update a live whiteboard
 
 ```powershell
-lark-cli whiteboard +query --whiteboard-token "<whiteboard_token>" --output_as code --as user
-Get-Content .\diagram.mmd | lark-cli whiteboard +update --whiteboard-token "<whiteboard_token>" --source - --input_format mermaid --overwrite --yes --as user
+node scripts/feishu_text_diagram.cjs whiteboard query --whiteboard-token "<whiteboard_token>" --output-as code --as user
+node scripts/feishu_text_diagram.cjs whiteboard update --whiteboard-token "<whiteboard_token>" --source "@.\diagram.mmd" --input-format mermaid --overwrite
+```
+
+The overwrite command dry-runs by default. After reviewing the request, add `--apply` to execute the whiteboard update.
+
+### 5b. Use lark-cli 1.0.27 sidecar tools
+
+```powershell
+node scripts/feishu_cli_tools.cjs doctor
+node scripts/feishu_cli_tools.cjs sheet info --url "<sheet_url>"
+node scripts/feishu_cli_tools.cjs base record-get --base-token "<base_token>" --table-id "<table_id>" --record-id "<record_id>"
+node scripts/feishu_cli_tools.cjs task upload-attachment --resource-id "<task_guid_or_url>" --file ".\brief.pdf"
+node scripts/feishu_cli_tools.cjs im messages-search --query "PRD" --page-size 10
+node scripts/feishu_cli_tools.cjs drive add-comment --doc "<doc_or_wiki_url>" --content '[{"type":"text","text":"请 review"}]' --dry-run
 ```
 
 ### 6. Merge a git diff into one document
@@ -281,6 +412,65 @@ During import, the skill will:
 - restore standalone local non-Markdown, non-CSV files as positioned Feishu file blocks
 - remove standalone local `CSV` links so embedded-sheet previews remain inline tables only
 
+## Sync and Format Behavior
+
+v1.6.0 uses three local layers:
+
+- editable layer: Markdown, CSV, and readable preview files
+- format layer: `*.assets/*.format.xml`, `*.xlsx`, `sheet-format.json`, `format-map.json`, and raw JSON audit files
+- baseline layer: `.feishu-sync/manifest.json`
+
+The sync shell treats format-layer edits as high risk. If a local change touches `*.format.xml`, `format-map.json`, `sheet-format.json`, or raw JSON, `push --apply` stops and writes a conflict report instead of guessing.
+
+For Markdown push, v1.6.0 is deliberately conservative: if `format-map.json` shows rich format blocks, guarded push will not do a Markdown overwrite. It compiles supported Markdown edits into the XML snapshot first. If the Markdown and XML structures cannot be matched safely, it stops and writes a conflict report.
+
+Manual consistency check:
+
+```powershell
+node scripts/compile_feishu_doc_xml.cjs --markdown ".\doc.md" --format-xml ".\doc.assets\doc.format.xml" --check
+```
+
+Manual compiled XML output:
+
+```powershell
+node scripts/compile_feishu_doc_xml.cjs --markdown ".\doc.md" --format-xml ".\doc.assets\doc.format.xml" --out ".\.tmp\doc.compiled.xml"
+```
+
+## Tested Result on `lark-cli v1.0.23`
+
+Real tests were run on `2026-05-04`.
+
+### Sheet bidirectional write-back
+
+Created and retained a real Feishu Sheet:
+
+- target sheet: `<redacted-feishu-sheet-url>`
+- sheet id: `f97139`
+- created with `sheets +create`
+- range overwrite succeeded with `scripts/import_feishu_sheet.cjs --range A2:C3`
+- JSON append succeeded with `scripts/import_feishu_sheet.cjs --mode append --range A:C`
+- CSV write-back succeeded with `scripts/import_feishu_sheet.cjs --input .tmp\codex-sheet-writeback.csv --range A6:C7`
+- CSV export saved `.tmp/codex-sheet-validation.csv`
+- XLSX export saved `.tmp/codex-sheet-validation.xlsx`
+
+One CSV write-back run hit a transient EOF during read-back after the write call. Retrying the same explicit range succeeded, and the script now retries transient read-back failures.
+
+### Text-drawing add-ons support
+
+Created and retained a real Feishu Doc:
+
+- target doc: `<redacted-feishu-doc-url>`
+- `docs +create --api-version v2` accepted XML containing `<add-ons .../>`
+- `docs +update --api-version v2 --command append` accepted XML containing `<add-ons .../>`
+- both calls returned success with no warnings
+- `docs +fetch --api-version v2 --doc-format xml --detail full` did not return any live `<add-ons>` blocks
+
+Conclusion:
+
+- `lark-cli v1.0.23` does not prove live text-drawing round-trip support.
+- Keep exporting text-drawing content as Mermaid/text code blocks.
+- Do not claim live add-ons write-back unless a future fetch confirms the add-ons block is preserved.
+
 ## Tested Result on `lark-cli v1.0.20`
 
 Real tests were run on `2026-04-27`.
@@ -289,7 +479,7 @@ Real tests were run on `2026-04-27`.
 
 Created a real Feishu document from local Markdown, then merged a complex `.diff` into it:
 
-- target doc: `https://milesight.feishu.cn/docx/PEM3dMlC5o3yxlxLu9tcJVSwno2`
+- target doc: `<redacted-feishu-doc-url>`
 - local original: `.tmp/feishu-diff-original.md`
 - local diff: `.tmp/feishu-diff-changes.diff`
 - local merge preview: `.tmp/feishu-diff-merged-preview-2.md`
@@ -350,8 +540,9 @@ Conclusion:
 
 ## Current Limitations
 
-- Feishu text-drawing `add-ons` are preserved as Mermaid/text code blocks by default. Keep treating live add-on round-trip as unproven unless a target-tenant write test succeeds
-- Exported whiteboards still use `code -> raw` fallback. Non-code whiteboards are preserved as Mermaid mindmap text plus raw JSON sidecars; live whiteboard updates should go through `lark-cli whiteboard +update`
+- Feishu text-drawing `add-ons` are preserved as Mermaid/text code blocks by default. Cloud validation on 2026-05-10 showed doc v2 `<add-ons>` are not live round-trippable in this tenant.
+- Exported whiteboards still use `code -> raw` fallback. Non-code whiteboards are preserved as Mermaid mindmap text plus raw JSON sidecars; live whiteboard updates should go through `scripts/feishu_text_diagram.cjs`
+- Drive-native `.md` files are managed separately through `scripts/feishu_markdown_file.cjs`; they are not doc/wiki sync objects
 - Same-document anchor links are not reliable after Feishu import
 - Local Markdown links are downgraded to readable text paths
 - Standalone local `CSV` links are intentionally removed during import in favor of inline table previews
@@ -377,10 +568,24 @@ Conclusion:
 
 - `scripts/export_feishu_wiki.cjs`
   Export Feishu wiki/doc content into local Markdown and assets
+- `scripts/feishu_sync.cjs`
+  Inspect, pull, plan, and guarded-push manifest-backed sync workspaces
+- `scripts/compile_feishu_doc_xml.cjs`
+  Merge human-edited Markdown text into the XML format snapshot before rich-format write-back
 - `scripts/audit_feishu_export.cjs`
   Generate a round-trip audit report
 - `scripts/import_feishu_markdown.cjs`
   Re-import Markdown into Feishu docs with positioned media restore
+- `scripts/import_feishu_sheet.cjs`
+  Write CSV or JSON 2D array data back into a Feishu Sheet explicit range and verify by read-back
+- `scripts/feishu_markdown_file.cjs`
+  Create, fetch, and overwrite Drive-native Markdown files without replacing doc/wiki sync
+- `scripts/feishu_cli_tools.cjs`
+  Run guarded wrappers for lark-cli v1.0.24-v1.0.27 Sheet, Base, Task, IM, Drive, and config capabilities
+- `scripts/feishu_text_diagram.cjs`
+  Update whiteboards from Mermaid/PlantUML and verify doc `<add-ons>` text drawing experimentally
+- `scripts/lib/lark_cli.cjs`
+  Shared lark-cli runner, version check, JSON parser, and path helper
 - `scripts/patch_feishu_doc.cjs`
   Run focused `docs +update --api-version v2` operations for chapter, paragraph, and block edits
 - `scripts/merge_diff_to_feishu_doc.cjs`

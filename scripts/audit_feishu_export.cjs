@@ -102,7 +102,70 @@ function analyzeSheetDirs(allFiles) {
   return results;
 }
 
-function buildReport(markdownResults, sheetResults) {
+function analyzeReadability(allFiles) {
+  const byPath = new Set(allFiles.map((file) => file.replace(/\\/g, "/")));
+  const rawOnly = [];
+  const missingFormatMaps = [];
+  const missingFormatXmlSnapshots = [];
+  const misplacedFormatXmlSnapshots = [];
+  const missingSheetFormats = [];
+
+  for (const file of allFiles) {
+    const normalized = file.replace(/\\/g, "/");
+    if (/\.raw\.json$/i.test(file)) {
+      const preview = normalized.replace(/\.raw\.json$/i, ".preview.md");
+      if (!byPath.has(preview)) {
+        rawOnly.push(file);
+      }
+    }
+    if (/metadata\.json$/i.test(file)) {
+      let metadata;
+      try {
+        metadata = JSON.parse(fs.readFileSync(file, "utf8"));
+      } catch (error) {
+        continue;
+      }
+      const dir = path.basename(path.dirname(file)).endsWith(".assets")
+        ? path.dirname(path.dirname(file))
+        : path.dirname(file);
+      const assetsDir = path.basename(path.dirname(file)).endsWith(".assets")
+        ? path.dirname(file)
+        : path.join(dir, `${path.basename(dir)}.assets`);
+      if (metadata.obj_type === "doc" || metadata.obj_type === "docx") {
+        if (!fs.existsSync(path.join(assetsDir, "format-map.json"))) {
+          missingFormatMaps.push(dir);
+        }
+        const hasFormatXml =
+          fs.existsSync(assetsDir) &&
+          fs.readdirSync(assetsDir).some((entry) => /\.format\.xml$/i.test(entry));
+        if (!hasFormatXml) {
+          missingFormatXmlSnapshots.push(dir);
+        }
+        const hasMisplacedFormatXml =
+          fs.existsSync(dir) &&
+          fs
+            .readdirSync(dir, { withFileTypes: true })
+            .some((entry) => entry.isFile() && /\.format\.xml$/i.test(entry.name));
+        if (hasMisplacedFormatXml) {
+          misplacedFormatXmlSnapshots.push(dir);
+        }
+      }
+      if (metadata.obj_type === "sheet" && !fs.existsSync(path.join(dir, "sheet-format.json"))) {
+        missingSheetFormats.push(dir);
+      }
+    }
+  }
+
+  return {
+    rawOnly,
+    missingFormatMaps,
+    missingFormatXmlSnapshots,
+    misplacedFormatXmlSnapshots,
+    missingSheetFormats,
+  };
+}
+
+function buildReport(markdownResults, sheetResults, readabilityResults) {
   const imageRiskFiles = markdownResults.filter((item) => item.imagePlaceholders > 0);
   const localizedImageFiles = markdownResults.filter((item) => item.localImages > 0);
   const embeddedSheetFiles = markdownResults.filter(
@@ -128,6 +191,9 @@ function buildReport(markdownResults, sheetResults) {
   lines.push(`- 审计目录: \`${rel(exportRoot)}\``);
   lines.push(`- Markdown 文件数: ${markdownResults.length}`);
   lines.push(`- Sheet 节点数: ${sheetResults.length}`);
+  lines.push(`- Raw-only 资源数: ${readabilityResults.rawOnly.length}`);
+  lines.push(`- 缺少格式映射的文档数: ${readabilityResults.missingFormatMaps.length}`);
+  lines.push(`- 缺少 XML 格式快照的文档数: ${readabilityResults.missingFormatXmlSnapshots.length}`);
   lines.push("");
   lines.push("## 总结");
   lines.push("");
@@ -170,9 +236,43 @@ function buildReport(markdownResults, sheetResults) {
   lines.push("");
   lines.push("## 建议修订");
   lines.push("");
-  if (!whiteboardLinkFiles.length && !unresolvedAddonFiles.length && !localizedImageFiles.length) {
+  if (
+    !whiteboardLinkFiles.length &&
+    !unresolvedAddonFiles.length &&
+    !localizedImageFiles.length &&
+    !readabilityResults.rawOnly.length &&
+    !readabilityResults.missingFormatMaps.length &&
+    !readabilityResults.missingFormatXmlSnapshots.length &&
+    !readabilityResults.misplacedFormatXmlSnapshots.length &&
+    !readabilityResults.missingSheetFormats.length
+  ) {
     lines.push("- 当前未发现建议修订项。");
   } else {
+    for (const file of readabilityResults.rawOnly) {
+      lines.push(
+        `- [${path.basename(file)}](${rel(file)}): 只有 raw 数据，没有 preview；需要补生成可读预览。`,
+      );
+    }
+    for (const dir of readabilityResults.missingFormatMaps) {
+      lines.push(
+        `- [${path.basename(dir)}](${rel(dir)}): 缺少 format-map.json；格式三方合并无法安全执行。`,
+      );
+    }
+    for (const dir of readabilityResults.missingFormatXmlSnapshots) {
+      lines.push(
+        `- [${path.basename(dir)}](${rel(dir)}): 缺少 assets 内的 .format.xml；远端格式恢复缺少 XML 快照。`,
+      );
+    }
+    for (const dir of readabilityResults.misplacedFormatXmlSnapshots) {
+      lines.push(
+        `- [${path.basename(dir)}](${rel(dir)}): .format.xml 仍在文档主目录；应移动到同名 .assets 文件夹。`,
+      );
+    }
+    for (const dir of readabilityResults.missingSheetFormats) {
+      lines.push(
+        `- [${path.basename(dir)}](${rel(dir)}): 缺少 sheet-format.json；CSV 写回无法自动定位 sheet/range。`,
+      );
+    }
     for (const item of whiteboardLinkFiles) {
       lines.push(
         `- [${path.basename(path.dirname(item.filePath))}/index.md](${rel(item.filePath)}): 含 ${item.whiteboardLinkPlaceholders} 个白板链接占位，建议改存为普通代码块或补抓取代码。`,
@@ -226,6 +326,8 @@ function buildReport(markdownResults, sheetResults) {
   lines.push("| 嵌入表格 | CSV 文件 + Markdown 预览表格 | 保真为数据 | 本地可直接阅读，回导时保留预览表格文本 |");
   lines.push("| sheet 节点 | xlsx + csv 目录 | 大体保真 | 本地完整保留，回导为文档时以文本/附件策略为主 |");
   lines.push("| add-ons 文本绘图 | 已转代码块 | 保真为文本 | 当前飞书 CLI 不支持回写 add-ons |");
+  lines.push("| 格式快照 | *.assets/*.format.xml + format-map.json | 辅助保真 | 用于 v1.6.0 三方合并和格式恢复 |");
+  lines.push("| 白板 raw | raw.json + preview.md + mindmap.mmd | 可读降级 | raw 仅作审计，不作为主要阅读入口 |");
   lines.push("");
   lines.push("## 后续建议");
   lines.push("");
@@ -249,7 +351,8 @@ function main() {
   );
   const markdownResults = markdownFiles.map(analyzeMarkdown);
   const sheetResults = analyzeSheetDirs(allFiles);
-  const report = buildReport(markdownResults, sheetResults);
+  const readabilityResults = analyzeReadability(allFiles);
+  const report = buildReport(markdownResults, sheetResults, readabilityResults);
   const reportPath = path.join(exportRoot, "roundtrip-audit.md");
   fs.writeFileSync(reportPath, `${report}\n`, "utf8");
   console.log(reportPath);
