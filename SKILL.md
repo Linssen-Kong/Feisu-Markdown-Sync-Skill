@@ -12,6 +12,8 @@ Required `lark-cli`: `>= 1.0.27`
 
 Some legacy script names and default export folders still use `wiki` for compatibility. Product and install names should use **Feishu Markdown Sync** because doc, Sheet, Drive-native Markdown, and whiteboard workflows are now in scope.
 
+Migration note: the old installed skill name was `feishu-wiki-markdown-sync`. The current installed skill name is `feishu-markdown-sync`. Do not keep both installed directories under `$CODEX_HOME/skills`, because Codex will load two skills with the same functional scope.
+
 ## Configuration
 
 This skill no longer hardcodes tenant domains or wiki tokens.

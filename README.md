@@ -78,6 +78,8 @@ python "$env:USERPROFILE\.codex\skills\.system\skill-installer\scripts\install-s
 
 If `C:\Users\<you>\.codex\skills\feishu-markdown-sync` already exists, remove or rename that installed skill directory first, then run the command again. If you previously installed `feishu-wiki-markdown-sync`, remove that old installed skill directory after confirming the new skill loads. Restart Codex after installation so the updated skill is loaded.
 
+> Migration note: this skill was previously installed as `feishu-wiki-markdown-sync`. The new install name is `feishu-markdown-sync`. Keeping both directories under `C:\Users\<you>\.codex\skills\` will make Codex load two skills with the same functional scope, so delete or rename the old `feishu-wiki-markdown-sync` directory after upgrading.
+
 ## Product Direction
 
 The product is moving from "Wiki Markdown export" to "Feishu knowledge asset sync":

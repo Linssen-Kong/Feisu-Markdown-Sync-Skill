@@ -23,6 +23,8 @@ python "$env:USERPROFILE\.codex\skills\.system\skill-installer\scripts\install-s
 
 如果 `C:\Users\<you>\.codex\skills\feishu-markdown-sync` 已存在，请先删除或重命名这个已安装 skill 目录，再运行上面的命令。如果你之前安装过 `feishu-wiki-markdown-sync`，确认新 skill 可用后可以删除旧安装目录。安装后需要重启 Codex，新的 skill 才会被加载。
 
+> 迁移说明：本 skill 旧安装名是 `feishu-wiki-markdown-sync`，新安装名是 `feishu-markdown-sync`。如果两个目录同时存在于 `C:\Users\<you>\.codex\skills\` 下，Codex 会加载两个功能范围相同的 skill。升级后请删除或重命名旧的 `feishu-wiki-markdown-sync` 目录，只保留新目录。
+
 ## 为什么需要它
 
 飞书文档适合协作，但默认不适合 Git diff、归档和离线审阅。本项目的目标是让产品文档、PRD、设计文档、表格型规划资料和白板内容变得：
